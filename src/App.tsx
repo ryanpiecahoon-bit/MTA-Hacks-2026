@@ -329,7 +329,7 @@ function SignInScreen({ onSignedIn }: { onSignedIn: (user: SessionUser) => void 
     <main className="page center">
       <form className="card form" onSubmit={handleSubmit}>
         <h1>School Sign In</h1>
-        <p className="muted">Only {appConfig.allowedDomains.map((item) => `@${item}`).join(" / ")} accounts are allowed.</p>
+        <p className="muted">Only {appConfig.allowedDomains.map((item: string) => `@${item}`).join(" / ")} accounts are allowed.</p>
         <label>
           Name
           <input value={name} onChange={(event) => setName(event.target.value)} />
