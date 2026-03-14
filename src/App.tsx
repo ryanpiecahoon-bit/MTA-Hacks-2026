@@ -366,7 +366,7 @@ function TeacherPollCard({ onCreatePoll }: { onCreatePoll: (form: FormData) => P
       >
         <label>
           Poll title
-          <input required name="title" placeholder="Week 5 Office Hours Availability" />
+          <input required name="title" placeholder="COMP-2931 Office Hours Availability" />
         </label>
         <div className="row">
           <label>
