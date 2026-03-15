@@ -57,16 +57,10 @@ export default function App() {
         const classMemberships = await dataStore.getClassesByIds(effectiveUser.myCourses);
         setClasses(classMemberships);
         if (classMemberships.length > 0) {
-          const classId = classMemberships[0].classId;
-          setActiveClassId(classId);
-          const [pollList, slotList, bookingList] = await Promise.all([
-            dataStore.listPolls(classId),
-            dataStore.listSlots(classId),
-            dataStore.listBookings(classId)
-          ]);
-          setPolls(pollList);
-          setSlots(slotList);
-          setBookings(bookingList);
+          setActiveClassId(classMemberships[0].classId);
+          const pollPromises = classMemberships.map((c) => dataStore.listPolls(c.classId));
+          const pollArrays = await Promise.all(pollPromises);
+          setPolls(pollArrays.flat());
         }
       } else {
         const pollList = await dataStore.listPollsForStudent(effectiveUser.myCourses);
@@ -97,21 +91,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session || !activeClassId) {
-      return;
-    }
+    if (!session) return;
     if (session.role === "teacher") {
+      if (classes.length === 0) return;
       void (async () => {
-        const [pollList, slotList, bookingList] = await Promise.all([
-          dataStore.listPolls(activeClassId),
-          dataStore.listSlots(activeClassId),
-          dataStore.listBookings(activeClassId)
-        ]);
-        setPolls(pollList);
-        setSlots(slotList);
-        setBookings(bookingList);
+        const pollPromises = classes.map((c) => dataStore.listPolls(c.classId));
+        const pollArrays = await Promise.all(pollPromises);
+        setPolls(pollArrays.flat());
       })();
     } else {
+      if (!activeClassId) return;
       void (async () => {
         const [slotList, bookingList] = await Promise.all([
           dataStore.listSlots(activeClassId),
@@ -121,7 +110,7 @@ export default function App() {
         setBookings(bookingList);
       })();
     }
-  }, [session, activeClassId]);
+  }, [session, activeClassId, classes]);
 
   function resetMessage(): void {
     setStatus("");
@@ -139,7 +128,7 @@ export default function App() {
   }
 
   async function handleCreatePoll(form: FormData): Promise<void> {
-    if (!session || !activeClass) {
+    if (!session || classes.length === 0) {
       return;
     }
     resetMessage();
@@ -156,21 +145,25 @@ export default function App() {
       const [startHour, endHour] = (hours ?? "").split("-").map((part: string) => part.trim());
       return { day: day.trim(), startHour, endHour };
     });
-    const poll: OfficeHoursPoll = {
-      pollId: makeId("poll"),
-      classId: activeClass.classId,
-      teacherEmail: session.email,
-      pollType,
-      title,
-      slotMinutes,
-      daysPerWeek,
-      closesAtIso: toIso(addDays(new Date(), 7)),
-      options
-    };
+    const newPolls: OfficeHoursPoll[] = [];
     try {
-      await dataStore.createPoll(poll);
-      setPolls((previous) => [poll, ...previous]);
-      setStatus("Poll created. It will close one week from now.");
+      for (const cls of classes) {
+        const poll: OfficeHoursPoll = {
+          pollId: makeId("poll"),
+          classId: cls.classId,
+          teacherEmail: session.email,
+          pollType,
+          title,
+          slotMinutes,
+          daysPerWeek,
+          closesAtIso: toIso(addDays(new Date(), 7)),
+          options
+        };
+        await dataStore.createPoll(poll);
+        newPolls.push(poll);
+      }
+      setPolls((previous) => [...newPolls, ...previous]);
+      setStatus(`Polls created for all ${newPolls.length} course${newPolls.length === 1 ? "" : "s"}. They will close one week from now.`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Failed to create poll.";
       setError(message);
@@ -200,9 +193,6 @@ export default function App() {
   }
 
   async function handleBuildConfig(poll: OfficeHoursPoll): Promise<void> {
-    if (!activeClass) {
-      return;
-    }
     resetMessage();
     try {
       const top = await dataStore.suggestTopConfigs(poll.pollId);
@@ -229,10 +219,12 @@ export default function App() {
         })
       };
       await dataStore.saveOfficeHoursConfig(config);
-      const nextSlots = await dataStore.listSlots(activeClass.classId);
+      const nextSlots = await dataStore.listSlots(poll.classId);
       setSlots(nextSlots);
+      const classInfo = classes.find((c) => c.classId === poll.classId);
+      const className = classInfo?.className ?? poll.classId;
       const lines = top.map((item) => `#${item.rank}: ${item.summary} (${item.estimatedCoverage} votes)`);
-      setStatus(`Top two configurations:\n${lines.join("\n")}`);
+      setStatus(`${className} - Top two configurations:\n${lines.join("\n")}`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Failed to suggest configurations.";
       setError(message);
@@ -315,10 +307,10 @@ export default function App() {
         </button>
       </header>
 
-      {classes.length > 0 && (
+      {classes.length > 0 && session.role !== "teacher" && (
         <section className="card">
           <label>
-            {session.role === "teacher" ? "Active course" : "Course (for booking slots)"}
+            Course (for booking slots)
             <select value={activeClassId} onChange={(event) => setActiveClassId(event.target.value)}>
               {classes.map((item) => (
                 <option key={item.classId} value={item.classId}>
@@ -336,8 +328,12 @@ export default function App() {
       {session.role === "teacher" ? (
         <>
           <TeacherPollCard onCreatePoll={handleCreatePoll} />
-          <TeacherReviewCard polls={polls} onSuggest={handleBuildConfig} />
-          <TeacherAnnouncementCard classes={classes} activeClassId={activeClassId} onSubmit={handleAnnouncement} />
+          <TeacherReviewCard polls={polls} classes={classes} onSuggest={handleBuildConfig} />
+          <TeacherAnnouncementCard
+            classes={classes}
+            activeClassId={activeClassId || classes[0]?.classId ?? ""}
+            onSubmit={handleAnnouncement}
+          />
         </>
       ) : (
         <>
@@ -452,11 +448,17 @@ function TeacherPollCard({ onCreatePoll }: { onCreatePoll: (form: FormData) => P
 
 function TeacherReviewCard({
   polls,
+  classes,
   onSuggest
 }: {
   polls: OfficeHoursPoll[];
+  classes: ClassMembership[];
   onSuggest: (poll: OfficeHoursPoll) => Promise<void>;
 }) {
+  const classByName = useMemo(
+    () => new Map(classes.map((c) => [c.classId, c.className])),
+    [classes]
+  );
   return (
     <section className="card">
       <h2>Poll review and top two suggestions</h2>
@@ -467,6 +469,7 @@ function TeacherReviewCard({
             <div>
               <strong>{poll.title}</strong>
               <p className="muted">
+                {classByName.get(poll.classId) ?? poll.classId} ·{" "}
                 {poll.pollType === "office_hours" ? "Office hours" : "General"} · Closes:{" "}
                 {prettyDate(poll.closesAtIso)}
               </p>

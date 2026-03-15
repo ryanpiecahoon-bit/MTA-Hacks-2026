@@ -237,10 +237,18 @@ class AppsScriptDataStore implements DataStore {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, ...payload })
     });
+    const text = await response.text();
     if (!response.ok) {
-      throw new Error(`Apps Script request failed: ${response.status}`);
+      throw new Error(`Apps Script request failed: ${response.status}${text.startsWith("<") ? " (server returned HTML - check Apps Script deployment and SPREADSHEET_ID)" : ": " + text.slice(0, 100)}`);
     }
-    return (await response.json()) as T;
+    if (text.startsWith("<")) {
+      throw new Error("Apps Script returned HTML instead of JSON. Check that the Web App URL is correct and the script is deployed (Execute as: Me, Who has access: Anyone).");
+    }
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error("Invalid JSON from Apps Script: " + text.slice(0, 100));
+    }
   }
 
   getPersonByEmail(email: string): Promise<Person | null> {
