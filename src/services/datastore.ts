@@ -7,7 +7,6 @@ import type {
   SessionUser,
   StudentPreference,
   TimeRange,
-  User,
   BestTimeResult
 } from "../types";
 
@@ -56,13 +55,11 @@ function saveState(state: LocalState): void {
 
 export interface DataStore {
   validateLogin(email: string, password: string): Promise<SessionUser | null>;
-  createUser(user: User): Promise<void>;
   listCoursesByTeacher(teacherEmail: string): Promise<Course[]>;
   listAllCourses(): Promise<Course[]>;
   createCourse(course: Course): Promise<void>;
   getAvailability(courseId: string): Promise<ProfessorAvailability | null>;
   setAvailability(courseId: string, timeRanges: TimeRange[]): Promise<void>;
-  listEnrollmentsForCourse(courseId: string): Promise<string[]>;
   listEnrollmentsForStudent(studentEmail: string): Promise<Course[]>;
   enroll(studentEmail: string, courseId: string): Promise<void>;
   getPreferences(studentEmail: string, courseId: string): Promise<TimeRange[]>;
@@ -81,17 +78,6 @@ class LocalDataStore implements DataStore {
       role: user.role,
       name: user.name
     });
-  }
-
-  async createUser(user: User): Promise<void> {
-    const state = loadState();
-    const exists = state.users.some((u) => u.email.toLowerCase() === user.email.toLowerCase());
-    if (exists) throw new Error("User already exists.");
-    state.users.push({
-      ...user,
-      email: user.email.trim().toLowerCase()
-    });
-    saveState(state);
   }
 
   listCoursesByTeacher(teacherEmail: string): Promise<Course[]> {
@@ -129,11 +115,6 @@ class LocalDataStore implements DataStore {
     }
     saveState(state);
     return Promise.resolve();
-  }
-
-  async listEnrollmentsForCourse(courseId: string): Promise<string[]> {
-    const enrollments = loadState().enrollments.filter((e) => e.courseId === courseId);
-    return enrollments.map((e) => e.studentEmail);
   }
 
   async listEnrollmentsForStudent(studentEmail: string): Promise<Course[]> {

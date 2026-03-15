@@ -4,8 +4,7 @@ import type {
   Course,
   ProfessorAvailability,
   SessionUser,
-  TimeRange,
-  User
+  TimeRange
 } from "../types";
 import type { DataStore } from "./datastore";
 
@@ -30,10 +29,6 @@ class RemoteDataStore implements DataStore {
     return callAction<SessionUser | null>("validateLogin", { email, password });
   }
 
-  async createUser(user: User): Promise<void> {
-    await callAction("createUser", { user });
-  }
-
   async listCoursesByTeacher(teacherEmail: string): Promise<Course[]> {
     return callAction<Course[]>("listCoursesByTeacher", { teacherEmail });
   }
@@ -52,10 +47,6 @@ class RemoteDataStore implements DataStore {
 
   async setAvailability(courseId: string, timeRanges: TimeRange[]): Promise<void> {
     await callAction("setAvailability", { courseId, timeRanges });
-  }
-
-  async listEnrollmentsForCourse(courseId: string): Promise<string[]> {
-    return callAction<string[]>("listEnrollmentsForCourse", { courseId });
   }
 
   async listEnrollmentsForStudent(studentEmail: string): Promise<Course[]> {

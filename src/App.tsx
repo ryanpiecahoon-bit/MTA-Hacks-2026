@@ -82,13 +82,11 @@ export default function App() {
     void loadProfessorData();
   }, [activeCourseId]);
 
-  const refreshBestTimes = () => {
-    if (session?.role === "teacher") void loadProfessorData();
-  };
-
   useEffect(() => {
     if (!session || session.role !== "teacher") return;
-    const interval = setInterval(refreshBestTimes, 5000);
+    const interval = setInterval(() => {
+      void loadProfessorData();
+    }, 5000);
     return () => clearInterval(interval);
   }, [session?.email, session?.role]);
 
@@ -364,7 +362,7 @@ function ProfessorAvailabilityForm({
 
   useEffect(() => {
     let cancelled = false;
-    createDataStore()
+    dataStore
       .getAvailability(courseId)
       .then((avail) => {
         if (!cancelled) setRanges(avail?.timeRanges ?? []);
@@ -561,7 +559,7 @@ function StudentSingleScheduleForm({
   useEffect(() => {
     let cancelled = false;
     if (firstCourseId) {
-      createDataStore()
+      dataStore
         .getPreferences(studentEmail, firstCourseId)
         .then((prefs) => {
           if (!cancelled) setRanges(prefs ?? []);
