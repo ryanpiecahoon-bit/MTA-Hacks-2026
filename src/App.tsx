@@ -183,14 +183,31 @@ export default function App() {
 }
 
 function SignInScreen({ onSignedIn }: { onSignedIn: (u: SessionUser) => void }) {
+  const [mode, setMode] = useState<"signin" | "create">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [err, setErr] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
+  function clearForm(): void {
+    setErr("");
+    setSuccess("");
+    setEmail("");
+    setPassword("");
+    setName("");
+  }
+
+  function handleSwitchMode(): void {
+    setMode((m) => (m === "signin" ? "create" : "signin"));
+    clearForm();
+  }
+
+  async function handleSignIn(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
     setErr("");
+    setSuccess("");
     setLoading(true);
     try {
       const user = await dataStore.validateLogin(email, password);
@@ -208,40 +225,142 @@ function SignInScreen({ onSignedIn }: { onSignedIn: (u: SessionUser) => void }) 
     }
   }
 
+  async function handleCreateAccount(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    setErr("");
+    setSuccess("");
+    setLoading(true);
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedName = name.trim();
+    const domain = trimmedEmail.split("@")[1] ?? "";
+    if (!appConfig.allowedDomains.includes(domain.toLowerCase())) {
+      setErr("Email must end with @mta.ca or @umoncton.ca.");
+      setLoading(false);
+      return;
+    }
+    if (!password) {
+      setErr("Password is required.");
+      setLoading(false);
+      return;
+    }
+    if (!trimmedName) {
+      setErr("Name is required.");
+      setLoading(false);
+      return;
+    }
+    try {
+      await dataStore.createUser({
+        email: trimmedEmail,
+        password,
+        name: trimmedName,
+        role: "student"
+      });
+      setSuccess("Account created. You can now sign in.");
+      setEmail("");
+      setPassword("");
+      setName("");
+      setTimeout(() => {
+        setMode("signin");
+        setSuccess("");
+      }, 2000);
+    } catch (caught) {
+      setErr(caught instanceof Error ? caught.message : "Failed to create account.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <main className="page center">
-      <form className="card form" onSubmit={handleSubmit}>
-        <h1>Sign In</h1>
-        <p className="muted">
-          Use email and password. Demo: teacher@mta.ca / password, student@mta.ca / password
-        </p>
-        <label>
-          Email
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={loading}
-            placeholder="you@mta.ca"
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={loading}
-            placeholder="••••••••"
-          />
-        </label>
-        <button type="submit" disabled={loading}>
-          {loading ? "Signing in…" : "Sign in"}
-        </button>
-        {err && <p className="error-text">{err}</p>}
-      </form>
+      {mode === "signin" ? (
+        <form className="card form" onSubmit={handleSignIn}>
+          <h1>Sign In</h1>
+          <p className="muted">
+            Use email and password. Demo: teacher@mta.ca / password, student@mta.ca / password
+          </p>
+          <label>
+            Email
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+              placeholder="you@mta.ca"
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+              placeholder="••••••••"
+            />
+          </label>
+          <button type="submit" disabled={loading}>
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+          {err && <p className="error-text">{err}</p>}
+          <p className="muted" style={{ marginTop: "1rem" }}>
+            Don&apos;t have an account?{" "}
+            <button type="button" className="link" onClick={handleSwitchMode}>
+              Create student account
+            </button>
+          </p>
+        </form>
+      ) : (
+        <form className="card form" onSubmit={handleCreateAccount}>
+          <h1>Create Student Account</h1>
+          <p className="muted">Email must be @mta.ca or @umoncton.ca.</p>
+          <label>
+            Email
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+              placeholder="you@mta.ca"
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+              placeholder="••••••••"
+            />
+          </label>
+          <label>
+            Name
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={loading}
+              placeholder="Your name"
+            />
+          </label>
+          <button type="submit" disabled={loading}>
+            {loading ? "Creating…" : "Create account"}
+          </button>
+          {err && <p className="error-text">{err}</p>}
+          {success && <p className="status ok">{success}</p>}
+          <p className="muted" style={{ marginTop: "1rem" }}>
+            Already have an account?{" "}
+            <button type="button" className="link" onClick={handleSwitchMode}>
+              Sign in
+            </button>
+          </p>
+        </form>
+      )}
     </main>
   );
 }
