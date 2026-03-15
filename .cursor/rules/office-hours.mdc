@@ -1,0 +1,31 @@
+---
+description: Project context for Office Hours Booking - key files, data flow, and constraints
+alwaysApply: true
+---
+
+# Office Hours Booking - Metaprompt
+
+You are helping develop the **Office Hours Booking** app: a frontend-only web app (React + TypeScript + Vite) with localStorage as persistence. Auth is email + password for professors and students. No backend required for demo. For full constraints and architecture, read [AGENTS.md](AGENTS.md) first.
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/App.tsx` | Root UI; sign-in (email+password); professor: create course, set availability, dashboard; student: register, scheduler |
+| `src/services/datastore.ts` | LocalDataStore; validateLogin, createCourse, setAvailability, enroll, setPreferences, computeBestTimes |
+| `src/services/auth.ts` | Session (localStorage); signIn(session), getSessionUser, signOut |
+| `src/types.ts` | User, SessionUser, Course, TimeRange, ProfessorAvailability, StudentPreference, Enrollment, BestTimeResult |
+| `src/services/bestTime.ts` | computeBestTimes algorithm: overlap professor + student ranges, best per day |
+| `src/config.ts` | appConfig: appName, allowedDomains (optional) |
+
+## Data Flow
+
+- **Professors:** create courses → set availability (time ranges per day) → dashboard shows best times per course (auto-refresh every 5s)
+- **Students:** register for courses (dropdown of all courses) → set availability per course via scheduler
+- **Best time:** computed from professor availability + enrolled students' preferences; displayed on professor dashboard
+
+## Constraints (do not break)
+
+- Auth: email + password; users stored in localStorage (seed: teacher@mta.ca, student@mta.ca / password).
+- No backend; persistence is localStorage. Google Sheets planned later.
+- Professor creates courses; students only see courses that exist. Best-time updates as students set preferences.
