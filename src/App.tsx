@@ -46,9 +46,6 @@ export default function App() {
     if (!session || session.role !== "teacher") return;
     const myCourses = await dataStore.listCoursesByTeacher(session.email);
     setCourses(myCourses);
-    if (myCourses.length > 0 && !activeCourseId) {
-      setActiveCourseId(myCourses[0].courseId);
-    }
     const results: BestTimeResult[] = [];
     for (const c of myCourses) {
       const bt = await dataStore.computeBestTimes(c.courseId);
@@ -76,11 +73,6 @@ export default function App() {
       void loadStudentData();
     }
   }, [session?.email]);
-
-  useEffect(() => {
-    if (!session || session.role !== "teacher") return;
-    void loadProfessorData();
-  }, [activeCourseId]);
 
   const refreshBestTimes = () => {
     if (session?.role === "teacher") void loadProfessorData();
@@ -116,8 +108,6 @@ export default function App() {
       {session.role === "teacher" ? (
         <ProfessorView
           courses={courses}
-          activeCourseId={activeCourseId}
-          setActiveCourseId={setActiveCourseId}
           bestTimes={bestTimes}
           onCreateCourse={async (form) => {
             resetMessage();
@@ -138,10 +128,12 @@ export default function App() {
               setError(e instanceof Error ? e.message : "Failed to create course.");
             }
           }}
-          onSetAvailability={async (courseId, ranges) => {
+          onSetAllAvailability={async (ranges) => {
             resetMessage();
             try {
-              await dataStore.setAvailability(courseId, ranges);
+              for (const c of courses) {
+                await dataStore.setAvailability(c.courseId, ranges);
+              }
               setStatus("Availability saved.");
               void loadProfessorData();
             } catch (e) {
@@ -256,18 +248,14 @@ function SignInScreen({ onSignedIn }: { onSignedIn: (u: SessionUser) => void }) 
 
 function ProfessorView({
   courses,
-  activeCourseId,
-  setActiveCourseId,
   bestTimes,
   onCreateCourse,
-  onSetAvailability
+  onSetAllAvailability
 }: {
   courses: Course[];
-  activeCourseId: string;
-  setActiveCourseId: (id: string) => void;
   bestTimes: BestTimeResult[];
   onCreateCourse: (form: FormData) => Promise<void>;
-  onSetAvailability: (courseId: string, ranges: TimeRange[]) => Promise<void>;
+  onSetAllAvailability: (ranges: TimeRange[]) => Promise<void>;
 }) {
   return (
     <>
@@ -323,29 +311,14 @@ function ProfessorView({
 
       <section className="card">
         <h2>Set your availability</h2>
-        <p className="muted">When are you willing to offer office hours? Students will indicate when they can attend.</p>
+        <p className="muted">When are you willing to offer office hours? This applies to all your courses. Students will indicate when they can attend.</p>
         {courses.length === 0 ? (
           <p className="muted">Create a course first.</p>
         ) : (
-          <>
-            <label>
-              Course
-              <select
-                value={activeCourseId}
-                onChange={(e) => setActiveCourseId(e.target.value)}
-              >
-                {courses.map((c) => (
-                  <option key={c.courseId} value={c.courseId}>
-                    {c.name} ({c.term})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <ProfessorAvailabilityForm
-              courseId={activeCourseId}
-              onSave={onSetAvailability}
-            />
-          </>
+          <ProfessorAvailabilityForm
+            courses={courses}
+            onSave={onSetAllAvailability}
+          />
         )}
       </section>
     </>
@@ -353,26 +326,31 @@ function ProfessorView({
 }
 
 function ProfessorAvailabilityForm({
-  courseId,
+  courses,
   onSave
 }: {
-  courseId: string;
-  onSave: (courseId: string, ranges: TimeRange[]) => Promise<void>;
+  courses: Course[];
+  onSave: (ranges: TimeRange[]) => Promise<void>;
 }) {
   const [ranges, setRanges] = useState<TimeRange[]>([]);
   const [savedMessage, setSavedMessage] = useState("");
 
+  const firstCourseId = courses[0]?.courseId;
   useEffect(() => {
     let cancelled = false;
-    createDataStore()
-      .getAvailability(courseId)
-      .then((avail) => {
-        if (!cancelled) setRanges(avail?.timeRanges ?? []);
-      });
+    if (firstCourseId) {
+      createDataStore()
+        .getAvailability(firstCourseId)
+        .then((avail) => {
+          if (!cancelled) setRanges(avail?.timeRanges ?? []);
+        });
+    } else {
+      if (!cancelled) setRanges([]);
+    }
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [firstCourseId]);
 
   function addRange(): void {
     setRanges((prev) => [...prev, { day: "Mon", startHour: "09:00", endHour: "10:00" }]);
@@ -391,7 +369,7 @@ function ProfessorAvailabilityForm({
 
   async function handleSave(): Promise<void> {
     try {
-      await onSave(courseId, ranges);
+      await onSave(ranges);
       setSavedMessage("Submitted.");
       setTimeout(() => setSavedMessage(""), 3000);
     } catch {
